@@ -33,7 +33,10 @@ class Output(cowrie.core.output.Output):
         self.batch_size = CowrieConfig().getint('output_dshield', 'batch_size')
         self.debug = CowrieConfig().getboolean('output_dshield', 'debug', fallback=False)
         self.batch = []  # This is used to store login attempts in batches
-
+        #TODO - Remove 
+        if self.debug:
+            log.msg("dshield: auth_key={} userid={} batch_size={}".format(self.auth_key,self.userid,self.batch_size))
+        
     def stop(self):
         pass
 
@@ -84,11 +87,11 @@ class Output(cowrie.core.output.Output):
         nonce = base64.b64decode(_nonceb64)
         digest = base64.b64encode(
             hmac.new(
-                b'{0}{1}'.format(nonce, self.userid),
+                str.encode('{0}{1}'.format(nonce, str(self.userid))),
                 base64.b64decode(self.auth_key),
                 hashlib.sha256).digest()
         )
-        auth_header = 'credentials={0} nonce={1} userid={2}'.format(digest, _nonceb64, self.userid)
+        auth_header = 'credentials={0} nonce={1} userid={2}'.format(digest.decode(), _nonceb64, self.userid)
         headers = {
             'X-ISC-Authorization': auth_header,
             'Content-Type': 'text/plain'
@@ -96,6 +99,7 @@ class Output(cowrie.core.output.Output):
 
         if self.debug:
             log.msg('dshield: posting: {}'.format(log_output))
+            log.msg('dshield: headers: {}'.format(headers)) #TODO remove
 
         req = threads.deferToThread(
             requests.request,
@@ -105,10 +109,13 @@ class Output(cowrie.core.output.Output):
             timeout=10,
             data=log_output
         )
+        #TODO - Remove
+        if self.debug:
+            log.msg('dshield: posting: {}'.format(log_output))
 
         def check_response(resp):
             failed = False
-            response = resp.content
+            response = resp.content.decode()
 
             if self.debug:
                 log.msg("dshield: status code {}".format(resp.status_code))
@@ -119,10 +126,10 @@ class Output(cowrie.core.output.Output):
                 sha1_match = sha1_regex.search(response)
                 if sha1_match is None:
                     log.err('dshield: ERROR: Could not find sha1checksum in response')
-                    log.err('dshield: ERROR: Response: {0}'.format(repr(response)))
+                    log.err('dshield: ERROR: Response: {0}'.format(response))
                     failed = True
                 sha1_local = hashlib.sha1()
-                sha1_local.update(log_output)
+                sha1_local.update(log_output.encode())
                 if sha1_match.group(1) != sha1_local.hexdigest():
                     log.err(
                         'dshield: ERROR: SHA1 Mismatch {0} {1} .'.format(sha1_match.group(1), sha1_local.hexdigest()))
